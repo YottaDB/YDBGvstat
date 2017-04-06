@@ -1,4 +1,4 @@
-; My current version of this code is published at https://github.com/ksbhaskar/Demo/gvstat.m
+; My current version of this code is published at https://github.com/ksbhaskar/Demo/blob/master/gvstat.m
 ; No claim of copyright is made with regard to this demonstration code; adapt the ideas herein to your specific requirements.
 ; If you fix bugs, or enhance it to be generally more useful vs. adapting it to your specific needs, please do e-mail
 ; your changes to bhaskar@bhaskars.com (or send a Github pull request), disclaiming any copyright, and I will consider including them.
