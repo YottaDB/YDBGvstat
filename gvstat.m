@@ -9,6 +9,7 @@
 ; Version  Date                Author                            Summary
 ;   0.1    April 6, 2017       K.S. Bhaskar                      Original version
 ;   0.11   April 7, 2017       K.S. Bhaskar                      Make gatherdb work correctly; bug fixes in edge cases
+;   0.12   July 17, 2018       K.S. Bhaskar			 Fix comment about time formats accepted by $$FUNC^%TI(); remove redundant set
 ;
 gvstat
         ; Utility program to demonstrate gathering and using GT.M database statistics
@@ -21,7 +22,7 @@ gvstat
         ;   --reg "*"|reg[,reg...] - comma separated list of regions, "*" or omit for all regions
         ;   --stat "*"|stat[,stat...] - comma separated list of statistics, "*" or omit for all statistics
         ;   --time fromtime[,totime] - inclusive range of times in selected dates, in format accepted by $$FUNC^%TI
-        ;     omitted fromtime defaults to 00:00:00, omitted totime defaults to 23:59:59
+        ;     omitted fromtime defaults to 00:00, omitted totime defaults to 23:59 (note that seconds are not accepted)
         ; --gatherdb [suboptions] - gather statistics and store in a database, where [suboptions] are:
         ;   --gld globaldirectoryfile - global directory for database in which to store statistics, defaults to $gtmgbldir
         ;   --int interval - interval in seconds between gatherings (program runs until terminated), defaults to 60 seconds
@@ -99,7 +100,7 @@ csvout(reg,date,time,stat)
         set date=$get(date)
         set:$length(date) fromdate=$$FUNC^%DATE($piece(date,",",1)),todate=$select($length(date,",")-1:$$FUNC^%DATE($piece(date,",",2)),1:fromdate)
         set time=$get(time) if ""=time set fromtime=0,totime=86399
-        else  set time=$get(time),fromtime=$$FUNC^%TI($piece(time,",",1)),totime=$select($length(time,",")-1:$$FUNC^%TI($piece(time,",",2)),1:$select(fromtime:fromtime+59,1:86399))
+        else  set fromtime=$$FUNC^%TI($piece(time,",",1)),totime=$select($length(time,",")-1:$$FUNC^%TI($piece(time,",",2)),1:$select(fromtime:fromtime+59,1:86399))
         set stat=$get(stat) do:"*"=stat!'$length(stat)
         . set r=$order(^gvstatinc("")) do:$length(r)
         . . set dt=$order(^gvstatinc(r,"")) do:$length(dt)
