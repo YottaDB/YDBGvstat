@@ -139,7 +139,7 @@ csvdump ; dump the entire ^gvstatinc global in csv format
 
 digest(line)
         ; line format expected is <region>,$horolog,$view("gvstat",<region>), so statistics start at 4th comma separated piece
-        new daytime,j,prevtime,reg,stat,tmp,val
+        new daytime,j,n,prevtime,reg,stat,tmp,val
         set reg=$piece(line,",",1)
         set daytime=$piece(line,",",2)*86400+$piece(line,",",3)
         set prevtime=+$order(^gvstat(reg,daytime),-1)
@@ -149,12 +149,11 @@ digest(line)
         . set:prevtime ^gvstatinc(reg,daytime,stat)=val-^gvstat(reg,prevtime,stat)
         do:prevtime    ; compute derived statistics
         . set ^gvstatinc(reg,daytime,"LKfrate")=$select(^("LKS"):^("LKF")/^("LKS"),1:$select(^("LKF"):999999999999999999,1:"")) ; LKF=nonzero+LKS=0 is infinite fail rate
-	. do:$data(^gvstatinc(reg,daytime,"CAT")) ; older versions of GT.M may not have CAT et al to compute derived statistics, also CAT may be zero
-        . . ; naked references used to make code fit on one line; none relied on outside a line
+	. set n=$get(^gvstatinc(reg,daytime,"CAT"),0) ; older versions of GT.M may not have CAT et al to compute derived statistics, also CAT may be zero
+        . do:n ; naked references used to make code fit on one line; none relied on outside a line
         . . set a=^gvstatinc(reg,daytime,"CFT"),b=^("CFS"),(avg,^("CFavg"))=a/n,(sigma,^("CFsigma"))=((b+(avg*(n*avg-(2*a))))/n)**.5,^("CFvar")=$select(sigma:sigma/avg,1:"")
         . . set a=^gvstatinc(reg,daytime,"CQT"),b=^("CQS"),(avg,^("CQavg"))=a/n,(sigma,^("CQsigma"))=((b+(avg*(n*avg-(2*a))))/n)**.5,^("CQvar")=$select(sigma:sigma/avg,1:"")
         . . set a=^gvstatinc(reg,daytime,"CYT"),b=^("CYS"),(avg,^("CYavg"))=a/n,(sigma,^("CYsigma"))=((b+(avg*(n*avg-(2*a))))/n)**.5,^("CYvar")=$select(sigma:sigma/avg,1:"")
-        . else  set (^gvstatinc(reg,daytime,"CFavg"),^("CFsigma"),^("CFvar"),^("CQavg"),^("CQsigma"),^("CQvar"),^("CYavg"),^("CYsigma"),^("CYvar"))=""
         quit
 
 donefile
