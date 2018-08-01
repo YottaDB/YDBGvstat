@@ -102,8 +102,9 @@ consume for   read line quit:$zeof  do:$length(line,",")-1 digest(line)
         quit
 
 csvout(reg,date,time,stat)
-        new d,dt,fromdate,fromtime,maxdt,mindt,t,tmp,todate,totime
-        set reg=$get(reg) if "*"=reg!'$length(reg) set (r,reg)=$order(^gvstatinc("")) for  set r=$order(^gvstatinc(r)) quit:""=r  set reg=reg_","_r
+        new d,dt,fromdate,fromtime,maxdt,mindt,r,s,t,tmp,todate,totime
+        set reg=$get(reg) if "*"=reg!'$length(reg) set (r,reg)=$order(^gvstatinc("")) quit:""=r  for  set r=$order(^gvstatinc(r)) quit:""=r  set reg=reg_","_r
+	set stat=$get(stat) if "*"=stat!'$length(stat) set (s,stat)=$order(^gvstatname("")) quit:""=s  for  set s=$order(^gvstatname(s)) quit:""=s  set stat=stat_","_s
         set date=$get(date)
         set:$length(date) fromdate=$$FUNC^%DATE($piece(date,",",1)),todate=$select($length(date,",")-1:$$FUNC^%DATE($piece(date,",",2)),1:fromdate)
         set time=$get(time) if ""=time set fromtime=0,totime=86399
@@ -111,10 +112,6 @@ csvout(reg,date,time,stat)
 	. set tmp=$piece(time,",",1),fromtime=$select($zlength(tmp):$$FUNC^%TI(tmp),1:0)
 	. set tmp=$piece(time,",",2),totime=$select($zlength(tmp):$$FUNC^%TI(tmp),1:86399)
 	. set:totime<fromtime totime=$select(fromtime<86340:59+fromtime,1:86399)
-        set stat=$get(stat) do:"*"=stat!'$length(stat)
-        . set r=$order(^gvstatinc("")) do:$length(r)
-        . . set dt=$order(^gvstatinc(r,"")) do:$length(dt)
-        . . . set (s,stat)=$order(^gvstatinc(r,dt,"")) for  set s=$order(^gvstatinc(r,dt,s)) quit:""=s  set stat=stat_","_s
         do:$length(stat)
         . write "REGION,DATE,TIME,",stat,!
         . set mindt=+$get(fromdate)*86400+fromtime-1,maxdt=$select($length($get(todate)):+todate,1:$piece($horolog,",",1))*86400+totime
@@ -128,13 +125,13 @@ csvout(reg,date,time,stat)
 csvdump ; dump the entire ^gvstatinc global in csv format
         new daytime,reg,stat,tmp
         set reg=$order(^gvstatinc("")) do:$length(reg)
-        . set daytime=$order(^gvstatinc(reg,"")) do:$length(daytime)
-        . . write "REGION,DATE,TIME,"
-        . . set (stat,tmp)="" for  set stat=$order(^gvstatinc(reg,daytime,stat)) write:$length(stat) stat,"," if ""=stat write ! quit
+        . set daytime=$order(^gvstatinc(reg,"")) do:$length(daytime)	; Dump output only if at least one region contains at least one incremental statistic
+        . . write "REGION,DATE,TIME"
+        . . set (stat,tmp)="" for  set stat=$order(^gvstatname(stat)) write:$length(stat) ",",stat if ""=stat write ! quit
         . . write $extract(tmp,1,$length(tmp-1))
         . . set reg="" for  set reg=$order(^gvstatinc(reg)) quit:""=reg  do
         . . . set daytime="" for  set daytime=$order(^gvstatinc(reg,daytime)) quit:""=daytime  write reg,",",$zdate(daytime\86400_","_(daytime#86400),"YEAR-MM-DD,24:60:SS") do
-        . . . . set stat="" for  set stat=$order(^gvstatinc(reg,daytime,stat)) write:$length(stat) ",",^gvstatinc(reg,daytime,stat) if ""=stat write ! quit
+        . . . . set stat="" for  set stat=$order(^gvstatname(stat)) write:$length(stat) ",",$get(^gvstatinc(reg,daytime,stat)) if ""=stat write ! quit
         quit
 
 digest(line)
@@ -144,16 +141,17 @@ digest(line)
         set daytime=$piece(line,",",2)*86400+$piece(line,",",3)
         set prevtime=+$order(^gvstat(reg,daytime),-1)
         for j=4:1:$length(line,",") do
-        . set tmp=$piece(line,",",j),stat=$piece(tmp,":",1),val=$piece(tmp,":",2)
-        . set ^gvstat(reg,daytime,stat)=val
-        . set:prevtime ^gvstatinc(reg,daytime,stat)=val-^gvstat(reg,prevtime,stat)
-        do:prevtime    ; compute derived statistics
-        . set ^gvstatinc(reg,daytime,"LKfrate")=$select(^("LKS"):^("LKF")/^("LKS"),1:$select(^("LKF"):999999999999999999,1:"")) ; LKF=nonzero+LKS=0 is infinite fail rate
+        . set tmp=$piece(line,",",j),stat=$piece(tmp,":",1),val=$piece(tmp,":",2),^gvstat(reg,daytime,stat)=val
+        . set:'$data(^gvstatname(stat)) ^gvstatname(stat)=""	; if not already recorded, record that there is a statistic stat
+        . set:prevtime ^gvstatinc(reg,daytime,stat)=val-$get(^gvstat(reg,prevtime,stat))   ; prevtime may not have this statistic if older version
+        do:prevtime    ; compute derived statistics - naked references used to make code fit on one line & none relied on outside a line
+        . set ^gvstatinc(reg,daytime,"LKfrate")=$select(^("LKS"):^("LKF")/^("LKS"),1:$select(^("LKF"):999999999999999999,1:"")) ; LKF=nonzero & LKS=0 is infinite fail rate
 	. set n=$get(^gvstatinc(reg,daytime,"CAT"),0) ; older versions of GT.M may not have CAT et al to compute derived statistics, also CAT may be zero
-        . do:n ; naked references used to make code fit on one line; none relied on outside a line
+        . do:n
         . . set a=^gvstatinc(reg,daytime,"CFT"),b=^("CFS"),(avg,^("CFavg"))=a/n,(sigma,^("CFsigma"))=((b+(avg*(n*avg-(2*a))))/n)**.5,^("CFvar")=$select(sigma:sigma/avg,1:"")
         . . set a=^gvstatinc(reg,daytime,"CQT"),b=^("CQS"),(avg,^("CQavg"))=a/n,(sigma,^("CQsigma"))=((b+(avg*(n*avg-(2*a))))/n)**.5,^("CQvar")=$select(sigma:sigma/avg,1:"")
         . . set a=^gvstatinc(reg,daytime,"CYT"),b=^("CYS"),(avg,^("CYavg"))=a/n,(sigma,^("CYsigma"))=((b+(avg*(n*avg-(2*a))))/n)**.5,^("CYvar")=$select(sigma:sigma/avg,1:"")
+	. . set:'$data(^gvstatname("CFavg")) (^gvstatname("CFavg"),^gvstatname("CFsigma"),^gvstatname("CFvar"),^gvstatname("CQavg"),^gvstatname("CQsigma"),^gvstatname("CQvar"),^gvstatname("CYavg"),^gvstatname("CYsigma"),^gvstatname("CYvar"))=""	; ensure computed statistic names are recorded if values exist
         quit
 
 donefile
