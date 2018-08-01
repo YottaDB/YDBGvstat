@@ -1,18 +1,24 @@
-; My current version of this code is published at https://github.com/ksbhaskar/Demo/blob/master/gvstat.m
-; No claim of copyright is made with regard to this demonstration code; adapt the ideas herein to your specific requirements.
-; If you fix bugs, or enhance it to be generally more useful vs. adapting it to your specific needs, please do e-mail
-; your changes to bhaskar@bhaskars.com (or send a Github pull request), disclaiming any copyright, and I will consider including them.
-;
-; K.S. Bhaskar
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;								;
+; Copyright (c) 2018 YottaDB LLC. and/or its subsidiaries.	;
+; All rights reserved.						;
+;								;
+;	This source code contains the intellectual property	;
+;	of its copyright holder(s), and is made available	;
+;	under a license.  If you do not know the terms of	;
+;	the license, please stop and do not read further.	;
+;								;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;
 ; Revision History:
 ; Version  Date                Author                            Summary
 ;   0.1    April 6, 2017       K.S. Bhaskar                      Original version
 ;   0.11   April 7, 2017       K.S. Bhaskar                      Make gatherdb work correctly; bug fixes in edge cases
 ;   0.12   July 17, 2018       K.S. Bhaskar			 Fix comment about time formats accepted by $$FUNC^%TI(); remove redundant set
+;   0.13   July 27, 2018       K.S. Bhaskar			 Revision history now at https://gitlab.com/YottaDB/Util/YDBgvstat
 ;
 gvstat
-        ; Utility program to demonstrate gathering and using GT.M database statistics
+        ; Utility program to demonstrate gathering and using YottaDB/GT.M database statistics
         ; Usage: mumps -run $text(+0) [options] where [options] is zero or one of:
         ; --consume - read lines of stdin ($PRINCIPAL) whose format is <region>,$horolog,$view("gvstat",<region>) and store into database
         ; --csvdump - dump all statistics in database in csv format to stdout
@@ -48,7 +54,8 @@ gvstat
         ;   do gatherdb^$text(+0)(gld,int)
         ;   do gatherfile^$text(+0)(fname,int,rolltod,rolldur)
         ;   do help^$text(+0)
-        ; Caution: this program assumes GT.M short circuting of expressions; compile accordingly.
+        ; Caution: this program assumes YottaDB/GT.M short circuting of expressions; compile accordingly.
+	; This program assumes exclusive access to the local variable %gvstatzut
 
         use $principal:(ctrap=$char(3):nocenable:exception="halt")         ; terminate on Ctrl-C if invoked from shell
         set $etrap="set $etrap=""use $principal write $zstatus,! zhalt 1"""
@@ -95,16 +102,16 @@ consume for   read line quit:$zeof  do:$length(line,",")-1 digest(line)
         quit
 
 csvout(reg,date,time,stat)
-        new d,dt,fromdate,fromtime,maxdt,mindt,t,todate,totime
-        set reg=$get(reg) if "*"=reg!'$length(reg) set (r,reg)=$order(^gvstatinc("")) for  set r=$order(^gvstatinc(r)) quit:""=r  set reg=reg_","_r
+        new d,dt,fromdate,fromtime,maxdt,mindt,r,s,t,tmp,todate,totime
+        set reg=$get(reg) if "*"=reg!'$length(reg) set (r,reg)=$order(^gvstatinc("")) quit:""=r  for  set r=$order(^gvstatinc(r)) quit:""=r  set reg=reg_","_r
+	set stat=$get(stat) if "*"=stat!'$length(stat) set (s,stat)=$order(^gvstatname("")) quit:""=s  for  set s=$order(^gvstatname(s)) quit:""=s  set stat=stat_","_s
         set date=$get(date)
         set:$length(date) fromdate=$$FUNC^%DATE($piece(date,",",1)),todate=$select($length(date,",")-1:$$FUNC^%DATE($piece(date,",",2)),1:fromdate)
         set time=$get(time) if ""=time set fromtime=0,totime=86399
-        else  set fromtime=$$FUNC^%TI($piece(time,",",1)),totime=$select($length(time,",")-1:$$FUNC^%TI($piece(time,",",2)),1:$select(fromtime:fromtime+59,1:86399))
-        set stat=$get(stat) do:"*"=stat!'$length(stat)
-        . set r=$order(^gvstatinc("")) do:$length(r)
-        . . set dt=$order(^gvstatinc(r,"")) do:$length(dt)
-        . . . set (s,stat)=$order(^gvstatinc(r,dt,"")) for  set s=$order(^gvstatinc(r,dt,s)) quit:""=s  set stat=stat_","_s
+        else  do
+	. set tmp=$piece(time,",",1),fromtime=$select($zlength(tmp):$$FUNC^%TI(tmp),1:0)
+	. set tmp=$piece(time,",",2),totime=$select($zlength(tmp):$$FUNC^%TI(tmp),1:86399)
+	. set:totime<fromtime totime=$select(fromtime<86340:59+fromtime,1:86399)
         do:$length(stat)
         . write "REGION,DATE,TIME,",stat,!
         . set mindt=+$get(fromdate)*86400+fromtime-1,maxdt=$select($length($get(todate)):+todate,1:$piece($horolog,",",1))*86400+totime
@@ -118,33 +125,33 @@ csvout(reg,date,time,stat)
 csvdump ; dump the entire ^gvstatinc global in csv format
         new daytime,reg,stat,tmp
         set reg=$order(^gvstatinc("")) do:$length(reg)
-        . set daytime=$order(^gvstatinc(reg,"")) do:$length(daytime)
-        . . write "REGION,DATE,TIME,"
-        . . set (stat,tmp)="" for  set stat=$order(^gvstatinc(reg,daytime,stat)) write:$length(stat) stat,"," if ""=stat write ! quit
+        . set daytime=$order(^gvstatinc(reg,"")) do:$length(daytime)	; Dump output only if at least one region contains at least one incremental statistic
+        . . write "REGION,DATE,TIME"
+        . . set (stat,tmp)="" for  set stat=$order(^gvstatname(stat)) write:$length(stat) ",",stat if ""=stat write ! quit
         . . write $extract(tmp,1,$length(tmp-1))
         . . set reg="" for  set reg=$order(^gvstatinc(reg)) quit:""=reg  do
         . . . set daytime="" for  set daytime=$order(^gvstatinc(reg,daytime)) quit:""=daytime  write reg,",",$zdate(daytime\86400_","_(daytime#86400),"YEAR-MM-DD,24:60:SS") do
-        . . . . set stat="" for  set stat=$order(^gvstatinc(reg,daytime,stat)) write:$length(stat) ",",^gvstatinc(reg,daytime,stat) if ""=stat write ! quit
+        . . . . set stat="" for  set stat=$order(^gvstatname(stat)) write:$length(stat) ",",$get(^gvstatinc(reg,daytime,stat)) if ""=stat write ! quit
         quit
 
 digest(line)
         ; line format expected is <region>,$horolog,$view("gvstat",<region>), so statistics start at 4th comma separated piece
-        new daytime,j,prevtime,reg,stat,tmp,val
+        new daytime,j,n,prevtime,reg,stat,tmp,val
         set reg=$piece(line,",",1)
         set daytime=$piece(line,",",2)*86400+$piece(line,",",3)
         set prevtime=+$order(^gvstat(reg,daytime),-1)
         for j=4:1:$length(line,",") do
-        . set tmp=$piece(line,",",j),stat=$piece(tmp,":",1),val=$piece(tmp,":",2)
-        . set ^gvstat(reg,daytime,stat)=val
-        . set:prevtime ^gvstatinc(reg,daytime,stat)=val-^gvstat(reg,prevtime,stat)
-        do:prevtime    ; compute derived statistics
-        . set ^gvstatinc(reg,daytime,"LKfrate")=$select(^("LKS"):^("LKF")/^("LKS"),1:$select(^("LKF"):999999999999999999,1:"")) ; LKF=nonzero+LKS=0 is infinite fail rate
-        . set n=$get(^gvstatinc(reg,daytime,"CAT"),0)   ; older versions of GT.M may not have CAT et al to compute derived statistics, also CAT may be zero
-        . if n do       ; naked references used to make code fit on one line; none relied on outside a line
+        . set tmp=$piece(line,",",j),stat=$piece(tmp,":",1),val=$piece(tmp,":",2),^gvstat(reg,daytime,stat)=val
+        . set:'$data(^gvstatname(stat)) ^gvstatname(stat)=""	; if not already recorded, record that there is a statistic stat
+        . set:prevtime ^gvstatinc(reg,daytime,stat)=val-$get(^gvstat(reg,prevtime,stat))   ; prevtime may not have this statistic if older version
+        do:prevtime    ; compute derived statistics - naked references used to make code fit on one line & none relied on outside a line
+        . set ^gvstatinc(reg,daytime,"LKfrate")=$select(^("LKS"):^("LKF")/^("LKS"),1:$select(^("LKF"):999999999999999999,1:"")) ; LKF=nonzero & LKS=0 is infinite fail rate
+	. set n=$get(^gvstatinc(reg,daytime,"CAT"),0) ; older versions of GT.M may not have CAT et al to compute derived statistics, also CAT may be zero
+        . do:n
         . . set a=^gvstatinc(reg,daytime,"CFT"),b=^("CFS"),(avg,^("CFavg"))=a/n,(sigma,^("CFsigma"))=((b+(avg*(n*avg-(2*a))))/n)**.5,^("CFvar")=$select(sigma:sigma/avg,1:"")
         . . set a=^gvstatinc(reg,daytime,"CQT"),b=^("CQS"),(avg,^("CQavg"))=a/n,(sigma,^("CQsigma"))=((b+(avg*(n*avg-(2*a))))/n)**.5,^("CQvar")=$select(sigma:sigma/avg,1:"")
         . . set a=^gvstatinc(reg,daytime,"CYT"),b=^("CYS"),(avg,^("CYavg"))=a/n,(sigma,^("CYsigma"))=((b+(avg*(n*avg-(2*a))))/n)**.5,^("CYvar")=$select(sigma:sigma/avg,1:"")
-        . else  set (^gvstatinc(reg,daytime,"CFavg"),^("CFsigma"),^("CFvar"),^("CQavg"),^("CQsigma"),^("CQvar"),^("CYavg"),^("CYsigma"),^("CYvar"))=""
+	. . set:'$data(^gvstatname("CFavg")) (^gvstatname("CFavg"),^gvstatname("CFsigma"),^gvstatname("CFvar"),^gvstatname("CQavg"),^gvstatname("CQsigma"),^gvstatname("CQvar"),^gvstatname("CYavg"),^gvstatname("CYsigma"),^gvstatname("CYvar"))=""	; ensure computed statistic names are recorded if values exist
         quit
 
 donefile
@@ -168,14 +175,14 @@ gatherdb(gld,int)
         set int=$select($length($get(int)):+$get(int),1:60)*1E6 ; convert to microseconds for compatibility with $ZUT
         set:$data(gld) savegd=$zgbldir
         set zint=$zinterrupt,$zinterrupt="set $zinterrupt=zint,int=0"
-        set nextint=$zut+int
+        set nextint=$$zut+int
         for  do:$increment(nextint,int)  quit:'int
         . set reg="" for  set reg=$view("gvnext",reg) quit:""=reg  do
         . . set stats=$view("gvstat",reg)
         . . set:$data(gld) $zgbldir=gld
         . . do digest(reg_","_$horolog_","_stats)
         . . set:$data(gld) $zgbldir=savegd
-        . hang nextint-$zut/1E6
+        . hang nextint-$$zut/1E6
         lock -^gvstat($job)
         quit
 
@@ -187,7 +194,7 @@ gatherfile(fname,int,rolltod,rolldur)
         new nextdur,nextint,nexttod,outfile,patlen,pattern,tmp,tmp1,zint,zut
         set patlen=$length(fname,"_") set:patlen<2 fname=fname_"_YEAR-MM-DD+24:60:SS",patlen=2
         set pattern=$piece(fname,"_",patlen),outfile=$piece(fname,"_",1,patlen-1)_"_"_$zdate($horolog,pattern)
-        set int=$select($length($get(int)):+$get(int),1:60)*1E6 ; convert to microseconds for compatibility with $ZUT
+        set int=$select($length($get(int)):+$get(int),1:60)*1E6 ; convert to microseconds for compatibility with $$ZUT
         set rolldur=+$get(rolldur) set rolldur=$select(0>rolldur:0,1:rolldur*1E6)
         set rolltod=$get(rolltod)  ; rolltod may not be numeric
         if rolltod!$length(rolltod) do
@@ -197,7 +204,7 @@ gatherfile(fname,int,rolltod,rolldur)
         else  set rolltod=0
         set zint=$zinterrupt,$zinterrupt="set $zinterrupt=zint zgoto "_$zlevel_":donefile"
         open outfile:newver use outfile
-        set (nextint,zut)=$zut,nextdur=$select(rolldur:zut+rolldur,1:0),nexttod=$select(rolltod:zut+rolltod,1:0)
+        set (nextint,zut)=$$zut,nextdur=$select(rolldur:zut+rolldur,1:0),nexttod=$select(rolltod:zut+rolltod,1:0)
         for  do:$increment(nextint,int)  if 'int do donefile quit
         . set reg="" for  set reg=$view("gvnext",reg) quit:""=reg  write reg,",",$horolog,",",$view("gvstat",reg),!
         . do:nextdur&(nextdur<nextint&$increment(nextdur,rolldur))!(nexttod&(nexttod<nextint&$increment(nexttod,86400*1E6)))
@@ -205,7 +212,7 @@ gatherfile(fname,int,rolltod,rolldur)
         . . close outfile:rename=outfile_"_to_"_tmp
         . . set outfile=$piece(fname,"_",1,patlen-1)_"_"_tmp
         . . open outfile:newver use outfile
-        . hang nextint-$zut/1E6
+        . hang nextint-$$zut/1E6
         quit
 
 help    new j,k,label,tmp
@@ -214,6 +221,9 @@ help    new j,k,label,tmp
         . write $piece(tmp,"$text(+0)",1) for k=2:1:$length(tmp,"$text(+0)") write $text(+0),$piece(tmp,"$text(+0)",k)
         . write !
         quit
+
+zut()	set:'$data(%gvstatzut) %gvstatzut=$select($ztranslate($zpiece($zversion," ",2),".-ABCDEFGHIJKLMNOPQRSTUVWXYZ")-62000>0:"$zut",1:"$zpiece($horolog,"","",1)*86400+$zpiece($horolog,"","",2)*1E6")	; use $zut for versions after V6.2-000
+	quit @%gvstatzut       ; Use $zut or substitute for older versions
 
 ;       Error message texts
 U246    ;"-F-ILLGATHERFILOPT Illegal suboption for --getherfile starting with: --"_cmdline
