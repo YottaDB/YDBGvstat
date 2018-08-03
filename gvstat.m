@@ -51,7 +51,7 @@ gvstat
         ;   do consume^$text(+0)
         ;   do csvout^$text(+0)(reg,date,time,stat)
         ;   do csvdump^$text(+0)
-        ;   do gatherdb^$text(+0)(gld,int)
+	        ;   do gatherdb^$text(+0)(gld,int)
         ;   do gatherfile^$text(+0)(fname,int,rolltod,rolldur)
         ;   do help^$text(+0)
         ; Caution: this program assumes YottaDB/GT.M short circuting of expressions; compile accordingly.
