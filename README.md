@@ -26,7 +26,7 @@ The following command reads the stored database statistics and prints them to st
 yottadb -run ^gvstat --csvdump
 ```
 
-The CSV data can for example be imported into Excel to be analyzed.
+The CSV data can for example be imported into a spreadsheet to be analyzed.
 
 Note that the above commands depend on the YottaDB environment variables to be initialized. This can be done for example by soursing the script `ydb_env_set`.
 
